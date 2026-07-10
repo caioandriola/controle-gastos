@@ -29,7 +29,6 @@ if not st.session_state.logado:
                 st.session_state.usuario_atual = usuario_input
                 st.session_state.spreadsheet_url = lista_usuarios[usuario_input]["spreadsheet"]
                 st.success(f"Bem-vindo(a), {usuario_input.capitalize()}!")
-                st.invalidate_pages() # Limpa cache de renderização
                 st.rerun()
             else:
                 st.error("Usuário ou senha incorretos.")
@@ -47,12 +46,12 @@ if st.sidebar.button("🚪 Sair / Trocar Conta"):
 
 st.title(f"💰 Planejamento de {st.session_state.usuario_atual.capitalize()}")
 
-# Força o st.connection a usar dinamicamente a planilha do usuário logado
-conn = st.connection("gsheets", type=GSheetsConnection)
+# PASSA APENAS O DICIONÁRIO DO GSHEETS PARA EVITAR CONFLITOS DE SEGURANÇA
+chaves_google = dict(st.secrets["connections"]["gsheets"])
+conn = st.connection("gsheets", type=GSheetsConnection, **chaves_google)
 
 # --- CARREGAR HISTÓRICO ---
 try:
-    # Passamos explicitamente o link correspondente a quem logou
     dados_existentes = conn.read(spreadsheet=st.session_state.spreadsheet_url, ttl=0) 
     dados_existentes = dados_existentes.dropna(how="all")
     if not dados_existentes.empty:
@@ -122,7 +121,6 @@ if st.button("🚀 Salvar / Atualizar no Google Sheets"):
         
     df_atualizado = df_atualizado.dropna(how="all")
     
-    # Atualiza especificamente na planilha configurada para este usuário logado
     conn.update(spreadsheet=st.session_state.spreadsheet_url, data=df_atualizado)
     st.success(f"Dados salvos com sucesso na sua planilha!")
     st.rerun()
