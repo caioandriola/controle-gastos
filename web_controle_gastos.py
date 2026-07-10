@@ -47,8 +47,7 @@ if st.sidebar.button("🚪 Sair / Trocar Conta"):
 st.title(f"💰 Planejamento de {st.session_state.usuario_atual.capitalize()}")
 
 # CONEXÃO LIMPA (O Streamlit busca automaticamente o bloco [connections.gsheets])
-conn = st.connection("gsheets", type=GSheetsConnection)
-
+conn = st.connection("meugoogle", type=GSheetsConnection)
 # --- CARREGAR HISTÓRICO ---
 try:
     # Passamos explicitamente a URL correta do usuário ativo no parâmetro 'spreadsheet'
