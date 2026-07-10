@@ -1,6 +1,7 @@
 import streamlit as st
 import calendar
-from streamlit_gsheets import GSheetsConnection
+import gspread
+from google.oauth2.service_account import Credentials
 import pandas as pd
 
 st.set_page_config(page_title="Orçamento Familiar", page_icon="💰", layout="centered")
@@ -46,19 +47,46 @@ if st.sidebar.button("🚪 Sair / Trocar Conta"):
 
 st.title(f"💰 Planejamento de {st.session_state.usuario_atual.capitalize()}")
 
-# CONEXÃO ISOLADA NO BLOCO CUSTOMIZADO [meugoogle]
-conn = st.connection("meugoogle", type=GSheetsConnection)
+# --- CONEXÃO DIRETA E ESTÁVEL COM GSPREAD ---
+@st.cache_resource
+def obter_cliente_google():
+    escopos = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+    # Carrega as chaves do dicionário raiz do st.secrets de forma explícita
+    info_chaves = {
+        "type": st.secrets["type"],
+        "project_id": st.secrets["project_id"],
+        "private_key_id": st.secrets["private_key_id"],
+        "private_key": st.secrets["private_key"],
+        "client_email": st.secrets["client_email"],
+        "client_id": st.secrets["client_id"],
+        "auth_uri": st.secrets["auth_uri"],
+        "token_uri": st.secrets["token_uri"],
+        "auth_provider_x509_cert_url": st.secrets["auth_provider_x509_cert_url"],
+        "client_x509_cert_url": st.secrets["client_x509_cert_url"]
+    }
+    credenciais = Credentials.from_service_account_info(info_chaves, scopes=escopos)
+    return gspread.authorize(credenciais)
 
-# --- CARREGAR HISTÓRICO ---
 try:
-    dados_existentes = conn.read(spreadsheet=st.session_state.spreadsheet_url, ttl=0) 
+    gc = obter_cliente_google()
+    # Abre a planilha individual do usuário logado usando a URL
+    planilha = gc.open_by_url(st.session_state.spreadsheet_url)
+    aba = planilha.get_worksheet(0) # Abre a primeira aba
+    
+    # Converte os dados da folha em DataFrame do Pandas
+    dados_brutos = aba.get_all_records()
+    if dados_brutos:
+        dados_existentes = pd.DataFrame(dados_brutos)
+    else:
+        dados_existentes = pd.DataFrame(columns=["Mes", "Renda", "Contas_Fixas", "Alimentação", "Transporte", "Lazer_Compras", "Guardar"])
+    
     dados_existentes = dados_existentes.dropna(how="all")
     if not dados_existentes.empty:
         dados_existentes['Mes'] = dados_existentes['Mes'].astype(str)
     gastos_salvos = dados_existentes.to_dict(orient="records")
-except Exception:
-    dados_existentes = pd.DataFrame(columns=["Mes", "Renda", "Contas_Fixas", "Alimentação", "Transporte", "Lazer_Compras", "Guardar"])
-    gastos_salvos = []
+except Exception as e:
+    st.error(f"Erro ao conectar com a sua planilha do Google: {e}")
+    st.stop()
 
 # Lista dos meses foco (Julho a Dezembro)
 meses_foco = [calendar.month_name[m] for m in range(7, 13)]
@@ -102,7 +130,7 @@ else:
     st.metric(label="⚠️ Saldo Estourado", value=f"R$ {saldo_restante:.2f}", delta=f"{saldo_restante:.2f}")
 
 if st.button("🚀 Salvar / Atualizar no Google Sheets"):
-    nova_linha = pd.DataFrame([{
+    nova_linha = {
         "Mes": mes_selecionado,
         "Renda": renda,
         "Contas_Fixas": contas_fixas,
@@ -110,21 +138,25 @@ if st.button("🚀 Salvar / Atualizar no Google Sheets"):
         "Transporte": transporte,
         "Lazer_Compras": lazer_compras,
         "Guardar": guardar
-    }])
+    }
     
+    # Atualiza a estrutura do DataFrame
     if not dados_mes_antigo.empty:
         df_atualizado = dados_existentes[dados_existentes['Mes'] != mes_selecionado]
-        df_atualizado = pd.concat([df_atualizado, nova_linha], ignore_index=True)
+        df_atualizado = pd.concat([df_atualizado, pd.DataFrame([nova_linha])], ignore_index=True)
     else:
-        df_atualizado = pd.concat([dados_existentes, nova_linha], ignore_index=True)
+        df_atualizado = pd.concat([dados_existentes, pd.DataFrame([nova_linha])], ignore_index=True)
         
     df_atualizado = df_atualizado.dropna(how="all")
     
-    conn.update(spreadsheet=st.session_state.spreadsheet_url, data=df_atualizado)
+    # Sobrescreve a planilha de forma limpa usando a API estável do gspread
+    aba.clear()
+    # Adiciona novamente o cabeçalho e as linhas atualizadas
+    aba.update([df_atualizado.columns.values.tolist()] + df_atualizado.values.tolist())
     st.success(f"Dados salvos com sucesso na sua planilha!")
     st.rerun()
 
-# --- EXIBIR HISTÓRICO INDIVIDUAL (ATUALIZADO PARA O NOVO PARÂMETRO 'WIDTH') ---
+# --- EXIBIR HISTÓRICO INDIVIDUAL ---
 if gastos_salvos:
     st.write("---")
     st.write("### 📋 Seu Histórico de Orçamentos Salvos")
