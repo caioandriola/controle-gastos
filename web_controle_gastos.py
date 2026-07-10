@@ -23,7 +23,7 @@ except Exception:
 # 3. Lógica dos meses (Focado de Julho até Dezembro)
 meses = [calendar.month_name[m] for m in range(1, 13)]
 quantidade_preenchida = len(gastos_salvos)
-indice_atual = 6 + quantity_preenchida  # Começa em Julho (índice 6) + quantidade já salva
+indice_atual = 6 + quantidade_preenchida  # Começa em Julho (índice 6) + quantidade já salva
 
 # --- INTERFACE PRINCIPAL DE CADASTRO ---
 if indice_atual < 12:
