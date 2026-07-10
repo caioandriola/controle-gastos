@@ -1,76 +1,58 @@
 import streamlit as st
 import calendar
-import json
-import os
+from streamlit_gsheets import GSheetsConnection
+import pandas as pd
 
-# Configuração visual da página web
-st.set_page_config(page_title="Controle de Gastos", page_icon="📊", layout="centered")
-st.title("📊 Controle de Gastos Mensais")
+st.set_page_config(page_title="Controle de Gastos", page_icon="📊")
+st.title("📊 Controle de Gastos com Google Sheets")
 
-# Gerar lista de meses (Janeiro a Dezembro)
+URL_PLANILHA = "https://docs.google.com/spreadsheets/d/https://docs.google.com/spreadsheets/d/1Frac6UuZ7uIrOWW5IWFwhWbjAu1VMGMCu9TKilskN1Y/edit?usp=sharing/edit?usp=sharing"
+
+# Cria a conexão com o Google Sheets
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+# --- CARREGAR DADOS EXISTENTES ---
+# Lemos a planilha atualizada direto do Google
+try:
+    dados_existentes = conn.read(spreadsheet=URL_PLANILHA, ttl=0) # ttl=0 garante dados em tempo real
+    # Se a planilha não estiver vazia, transformamos em lista de dicionários
+    gastos_salvos = dados_existentes.to_dict(orient="records")
+except Exception:
+    gastos_salvos = []
+
+# Determinar em qual mês parar/continuar
 meses = [calendar.month_name[m] for m in range(1, 13)]
+quantidade_preenchida = len(gastos_salvos)
+indice_atual = 6 + quantidade_preenchida  # Começa em Julho (6) + o que já foi preenchido
 
-# --- INICIALIZAÇÃO DO ESTADO DA SESSÃO ---
-# Substitui a lógica de declaração inicial do terminal
-if "gastos" not in st.session_state:
-    st.session_state.gastos = []
-if "i" not in st.session_state:
-    st.session_state.i = 6  # Começa em Julho por padrão
-if "historico_verificado" not in st.session_state:
-    st.session_state.historico_verificado = False
-
-# --- VERIFICADOR DE HISTÓRICO (POP-UP NA TELA) ---
-if os.path.exists("historico_gastos.json") and not st.session_state.historico_verificado:
-    st.warning("Encontramos um histórico antigo salvo!")
-    col1, col2 = st.columns(2)
+# --- INTERFACE ---
+if indice_atual < 12:
+    mes_atual = meses[indice_atual]
+    st.subheader(f"Preenchendo dados para: {mes_atual}")
     
-    with col1:
-        if st.button("Continuar de onde parei (Manter dados)"):
-            with open("historico_gastos.json", "r", encoding="utf-8") as arquivo:
-                st.session_state.gastos = json.load(arquivo)
-            st.session_state.i = 6 + len(st.session_state.gastos)
-            st.session_state.historico_verificado = True
-            st.rerun()
+    custo = st.number_input(f"Qual foi seu gasto em {mes_atual} (R$):", min_value=0.0, step=50.0)
+    lucros = st.number_input(f"Qual a meta de lucro para {mes_atual} (R$):", min_value=0.0, step=50.0)
+    
+    if st.button("🚀 Enviar para o Google Sheets"):
+        # 1. Cria a nova linha
+        nova_linha = pd.DataFrame([{"Mes": mes_atual, "Gasto": custo, "Lucro": lucros}])
+        
+        # 2. Junta os dados antigos com a nova linha
+        if gastos_salvos:
+            df_atualizado = pd.concat([dados_existentes, nova_linha], ignore_index=True)
+        else:
+            df_atualizado = nova_linha
             
-    with col2:
-        if st.button("Começar do zero (Apagar antigos)"):
-            st.session_state.gastos = []
-            st.session_state.i = 6
-            st.session_state.historico_verificado = True
-            st.rerun()
-
-# --- INTERFACE PRINCIPAL ---
-# Só mostra os campos se o verificador de histórico já foi resolvido
-if not os.path.exists("historico_gastos.json") or st.session_state.historico_verificado:
-    
-    i = st.session_state.i
-
-    if i < 12:
-        st.subheader(f"Preenchendo dados para: {meses[i]}")
+        # 3. Envia de volta para a nuvem do Google
+        conn.update(spreadsheet=URL_PLANILHA, data=df_atualizado)
         
-        # Inputs nativos do Streamlit com caixas de digitação
-        custo = st.number_input(f"Qual foi seu gasto em {meses[i]} (R$):", min_value=0.0, step=50.0)
-        lucros = st.number_input(f"Qual a meta de lucro para {meses[i]} (R$):", min_value=0.0, step=50.0)
-        
-        # Botão para adicionar o mês atual
-        if st.button("Registrar Mês"):
-            dados_mes = {"Mes": meses[i], "Gasto": custo, "Lucro": lucros}
-            st.session_state.gastos.append(dados_mes)
-            st.session_state.i += 1  # Avança o índice
-            st.success(f"{meses[i]} registrado!")
-            st.rerun()
-    else:
-        st.info("Todos os meses até Dezembro já foram preenchidos.")
+        st.success(f"Dados de {mes_atual} salvos na planilha!")
+        st.rerun()
+else:
+    st.info("Todos os meses de Julho a Dezembro já foram preenchidos!")
 
-    # --- SITUAÇÃO ATUAL (TABELA) ---
-    if st.session_state.gastos:
-        st.write("---")
-        st.write("### 📋 Situação Atual")
-        # Gera uma tabela interativa rica e limpa na tela na hora
-        st.dataframe(st.session_state.gastos, use_container_width=True)
-        
-        # Botão de salvar (Substitui a saída do terminal)
-        if st.button("💾 Finalizar e Salvar Arquivo"):
-            with open("historico_gastos.json", "w", encoding="utf-8") as arquivo:
-                json.dump(st.session_state.gastos, arquivo, indent=4, ensure_ascii=False)
-            st.success("Dados salvos com sucesso em 'historico_gastos.json'!")
+# --- EXIBIR HISTÓRICO ---
+if gastos_salvos:
+    st.write("---")
+    st.write("### 📋 Dados Salvos na Nuvem")
+    st.dataframe(gastos_salvos, use_container_width=True)
