@@ -51,12 +51,15 @@ st.title(f"💰 Planejamento de {st.session_state.usuario_atual.capitalize()}")
 @st.cache_resource
 def obter_cliente_google():
     escopos = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-    # Carrega as chaves do dicionário raiz do st.secrets de forma explícita
+    
+    # Tratamento cirúrgico da chave para converter texto \n em quebra de linha real
+    chave_formatada = st.secrets["private_key"].replace("\\n", "\n")
+    
     info_chaves = {
         "type": st.secrets["type"],
         "project_id": st.secrets["project_id"],
         "private_key_id": st.secrets["private_key_id"],
-        "private_key": st.secrets["private_key"],
+        "private_key": chave_formatada,
         "client_email": st.secrets["client_email"],
         "client_id": st.secrets["client_id"],
         "auth_uri": st.secrets["auth_uri"],
