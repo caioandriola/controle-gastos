@@ -46,11 +46,11 @@ if st.sidebar.button("🚪 Sair / Trocar Conta"):
 
 st.title(f"💰 Planejamento de {st.session_state.usuario_atual.capitalize()}")
 
-# CONEXÃO LIMPA (O Streamlit busca automaticamente o bloco [connections.gsheets])
+# CONEXÃO ISOLADA NO BLOCO CUSTOMIZADO [meugoogle]
 conn = st.connection("meugoogle", type=GSheetsConnection)
+
 # --- CARREGAR HISTÓRICO ---
 try:
-    # Passamos explicitamente a URL correta do usuário ativo no parâmetro 'spreadsheet'
     dados_existentes = conn.read(spreadsheet=st.session_state.spreadsheet_url, ttl=0) 
     dados_existentes = dados_existentes.dropna(how="all")
     if not dados_existentes.empty:
@@ -120,13 +120,12 @@ if st.button("🚀 Salvar / Atualizar no Google Sheets"):
         
     df_atualizado = df_atualizado.dropna(how="all")
     
-    # Atualiza na planilha correta passando o link dinâmico
     conn.update(spreadsheet=st.session_state.spreadsheet_url, data=df_atualizado)
     st.success(f"Dados salvos com sucesso na sua planilha!")
     st.rerun()
 
-# --- EXIBIR HISTÓRICO INDIVIDUAL ---
+# --- EXIBIR HISTÓRICO INDIVIDUAL (ATUALIZADO PARA O NOVO PARÂMETRO 'WIDTH') ---
 if gastos_salvos:
     st.write("---")
     st.write("### 📋 Seu Histórico de Orçamentos Salvos")
-    st.dataframe(dados_existentes, use_container_width=True)
+    st.dataframe(dados_existentes, width="stretch")
