@@ -46,12 +46,12 @@ if st.sidebar.button("🚪 Sair / Trocar Conta"):
 
 st.title(f"💰 Planejamento de {st.session_state.usuario_atual.capitalize()}")
 
-# PASSA APENAS O DICIONÁRIO DO GSHEETS PARA EVITAR CONFLITOS DE SEGURANÇA
-chaves_google = dict(st.secrets["connections"]["gsheets"])
-conn = st.connection("gsheets", type=GSheetsConnection, **chaves_google)
+# CONEXÃO LIMPA (O Streamlit busca automaticamente o bloco [connections.gsheets])
+conn = st.connection("gsheets", type=GSheetsConnection)
 
 # --- CARREGAR HISTÓRICO ---
 try:
+    # Passamos explicitamente a URL correta do usuário ativo no parâmetro 'spreadsheet'
     dados_existentes = conn.read(spreadsheet=st.session_state.spreadsheet_url, ttl=0) 
     dados_existentes = dados_existentes.dropna(how="all")
     if not dados_existentes.empty:
@@ -121,6 +121,7 @@ if st.button("🚀 Salvar / Atualizar no Google Sheets"):
         
     df_atualizado = df_atualizado.dropna(how="all")
     
+    # Atualiza na planilha correta passando o link dinâmico
     conn.update(spreadsheet=st.session_state.spreadsheet_url, data=df_atualizado)
     st.success(f"Dados salvos com sucesso na sua planilha!")
     st.rerun()
